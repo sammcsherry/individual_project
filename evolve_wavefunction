@@ -1,0 +1,21 @@
+import numpy as np
+
+class Wavefunction:
+    def __init__(self, initial_state, hamiltonian, time_step=0.01):
+        self.state = initial_state  
+        self.hamiltonian = hamiltonian  
+        self.time_step = time_step
+
+    def evolve(self, num_steps):
+        for _ in range(num_steps):
+            self.state = self.apply_evolution_operator(self.state)
+
+    def apply_evolution_operator(self, state):
+        # Compute the evolution operator as U = exp(-iHt/ℏ)
+        hbar = 1  # Set ℏ = 1 for simplicity; adjust based on your units
+        U = np.exp(-1j * self.hamiltonian * self.time_step / hbar)
+        return U @ state  # Evolve the state
+
+    def get_state(self):
+        return self.state
+
