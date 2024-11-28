@@ -67,6 +67,7 @@ class Lattice1D(Lattice):
         shape = self.chain_sites()
         lattice = self.create_unit_cell()
         self.model = pb.Model(lattice, shape)
+        self.lattice_positions = self.model.system.positions
         self.hamiltonian = self.model.hamiltonian
         return self.model
     
@@ -74,7 +75,36 @@ class Lattice1D(Lattice):
         chain_length = self.num_sites * self.unit_cell_length
         shape = pb.line([0, 0], [chain_length, 0]) 
         return shape
+    
+    def add_potential_gradient(self, potential, start_lattice, end_lattice):
+        if self.model is None:
+            raise ValueError("Model must be created before adding a potential gradient.")
+        
+        positions = self.model.system.positions 
+        x_positions = positions[0]
+        truncated_x_positions = x_positions[start_lattice:end_lattice] 
+        potential_coeff = potential/len(truncated_x_positions)
+        potential = np.zeros(len(x_positions))
+        potential[start_lattice:end_lattice] = potential_coeff * truncated_x_positions
+        potential_matrix = csr_matrix(np.diag(potential))
+        self.hamiltonian += potential_matrix
 
+        fig = plt.figure(figsize=(10, 8))
+        plt.plot(x_positions, potential)
+        plt.show()
+
+    def add_gaussian_potential(self, U0, x0, sigma):
+        positions = self.model.system.positions
+        x_positions = positions[0]
+
+        potential = U0 * np.exp(-((x_positions - x0)**2)/ (2 * sigma**2))
+
+        potential_matrix = csr_matrix(np.diag(potential))
+
+        self.hamiltonian += potential_matrix
+
+        plt.plot(x_positions, potential)
+        plt.show()
 
 class Lattice2D(Lattice):
     def __init__(self, unit_vectors, unit_cell_length=0.24595):
@@ -117,7 +147,6 @@ class Lattice2D(Lattice):
         ax.set_title("2D Potential Difference (Scatter Surface Plot)")
         ax.set_xlabel("X Position")
         ax.set_ylabel("Y Position")
-        ax.set_zlabel("Potential (U)")
         plt.show()
 
     def add_gaussian_potential(self, U0, x0, y0, sigma):
@@ -140,3 +169,18 @@ class Lattice2D(Lattice):
         ax.set_ylabel("Y Position")
         ax.set_zlabel("Potential (U)")
         plt.show()
+
+    def add_complex_absorbing_potential_exp(self, potential_strength, n, decay_rate=1.0):
+        num_sites = self.get_num_sites()
+
+        complex_potential = np.zeros(num_sites, dtype=np.complex128)
+        for i in range(n):
+            left_scale = -1j * potential_strength * np.exp(-decay_rate * (i / n))
+            right_scale = -1j * potential_strength * np.exp(-decay_rate * (i / n))
+
+            complex_potential[i] = left_scale
+            complex_potential[-(i + 1)] = right_scale
+
+        diagonal_matrix = csr_matrix(np.diag(complex_potential))
+
+        self.hamiltonian += diagonal_matrix

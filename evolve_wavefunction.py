@@ -10,7 +10,8 @@ from mpl_toolkits.mplot3d import Axes3D
 import math
 
 class Wavefunction:
-    def __init__(self, lattice, wave_type, time_step,  num_steps):
+    def __init__(self, lattice, wave_type, time_step,  num_steps, create_GIF = True):
+        self.create_GIF = create_GIF
         self.lattice = lattice
         self.x_length = 0
         self.y_length = 0
@@ -20,6 +21,7 @@ class Wavefunction:
         self.frames = []  # store frames for gif
         self.lattice_positions = lattice.model.system.positions
         self.num_sites = len(self.lattice_positions)
+        self.k_state = None
 
     def normalize(self):
         norm = np.linalg.norm(self.state)
@@ -27,14 +29,14 @@ class Wavefunction:
             self.state /= norm
 
     def evolve(self):
-        #self.lattice.get_hamiltonian_type()
         for step in range(self.num_steps):
             self.state = self.apply_evolution_operator(self.state)
-            
-            #self.normalize()
-            
-            frame_filename = self.plot_wavefunction_scatter(step)
-            self.frames.append(frame_filename)
+            if self.create_GIF:
+                self.save_frames(step)
+
+    def save_frames(self, step):
+        frame_filename = self.plot_wavefunction(step)
+        self.frames.append(frame_filename)
 
     def apply_evolution_operator(self, state):
         hbar = 1
@@ -66,12 +68,11 @@ class Wavefunction1D(Wavefunction):
     def gaussian_wavefunction(self, x0, sigma):
         num_sites = self.lattice.get_num_sites()
         x = np.arange(num_sites)
-        
-        # 1D Gaussian
         wavefunction_values = (1 / (np.sqrt(2 * np.pi) * sigma)) * np.exp(-((x - x0) ** 2) / (2 * sigma ** 2))
-        
+        # Normalize the wavefunction
+        wavefunction_values /= np.sqrt(np.sum(np.abs(wavefunction_values)**2))
         return wavefunction_values
-    
+
 
     def plot_wavefunction(self, step):
         plt.figure(figsize=(8, 6))
@@ -105,6 +106,33 @@ class Wavefunction1D(Wavefunction):
         H += diagonal_matrix
         self.lattice.set_hamiltonian(H)
 
+    def momentum_space(self):
+        self.k_state = np.fft.fft(self.state)
+        self.k_state = np.fft.fftshift(self.k_state) 
+
+        N = len(self.state)
+        # Normalize the FFT output
+        self.k_state /= np.sqrt(len(self.state))
+        dx = 1 
+        k = np.fft.fftshift(np.fft.fftfreq(N, d=dx)) * 2 * np.pi
+        # Plot momentum-space wavefunction
+        plt.plot(k, np.abs(self.k_state)**2)
+        plt.xlabel('Momentum (k)')
+        plt.ylabel('|ψ(k)|^2')
+        plt.title('Momentum-Space Wavefunction')
+        plt.show()
+
+    def calculate_transmission(self):
+        probability_density = np.abs(self.k_state)**2 
+        N = len(self.state)
+        dx = 1  
+        k = np.fft.fftshift(np.fft.fftfreq(N, d=dx)) * 2 * np.pi
+        transmitted = np.sum(probability_density[k > 0])
+        reflected = np.sum(probability_density[k < 0])
+        print(transmitted)
+        print(reflected)
+        return transmitted, reflected
+
 
 class Wavefunction2D(Wavefunction):
     def __init__(self, lattice, wave_type, time_step, num_steps, **kwargs):
@@ -119,8 +147,6 @@ class Wavefunction2D(Wavefunction):
 
     def gaussian_wavefunction(self, x0, y0, sigma):
         n = self.lattice.get_num_sites()
-        center_x = np.mean(self.lattice_positions[0])
-        center_y = np.mean(self.lattice_positions[1])
         psi_1d = np.zeros(n)
 
         for i, (x, y) in enumerate(zip(self.lattice_positions[0], self.lattice_positions[1])):
@@ -161,7 +187,7 @@ class Wavefunction2D(Wavefunction):
         
         return frame_filename
     
-    def plot_wavefunction_scatter(self, step):
+    def plot_wavefunction(self, step):
         x = self.lattice_positions[0]
         y = self.lattice_positions[1]
 
@@ -182,22 +208,4 @@ class Wavefunction2D(Wavefunction):
         plt.close()
         return frame_filename
     
-    def add_complex_absorbing_potential_exp(self, potential_strength, n, decay_rate=1.0):
-        num_sites = self.lattice.get_num_sites()
-        H = self.lattice.get_hamiltonian()
-
-        complex_potential = np.zeros(num_sites, dtype=np.complex128)
-        for i in range(n):
-            left_scale = -1j * potential_strength * np.exp(-decay_rate * (i / n))
-            right_scale = -1j * potential_strength * np.exp(-decay_rate * (i / n))
-
-            complex_potential[i] = left_scale
-            complex_potential[-(i + 1)] = right_scale
-
-        diagonal_matrix = sparse.diags(complex_potential)
-
-        H += diagonal_matrix
-
-        self.lattice.set_hamiltonian(H)
-
     
