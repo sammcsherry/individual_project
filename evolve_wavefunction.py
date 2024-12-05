@@ -41,12 +41,7 @@ class Wavefunction:
     def apply_evolution_operator(self, state):
         hbar = 1
         new_state = expm_multiply(-1j * self.lattice.hamiltonian * self.time_step / hbar, self.state)
-        #U = expm(-1j * self.lattice.hamiltonian * self.time_step / hbar)
-        #self.lattice.get_hamiltonian_type()
-        #return U@state
         return new_state
-
-
 
     def create_gif(self):
         with imageio.get_writer('wavefunction_evolution.gif', mode='I', duration=0.1) as writer:
@@ -72,6 +67,28 @@ class Wavefunction1D(Wavefunction):
         # Normalize the wavefunction
         wavefunction_values /= np.sqrt(np.sum(np.abs(wavefunction_values)**2))
         return wavefunction_values
+    
+    def spinor_state_init(self, x_momentum, y_momentum):
+        theta = np.arctan(y_momentum/x_momentum)
+        spinor_state = np.array([np.exp(1j*theta/2), np.exp(-1j*theta/2)])
+        return spinor_state.reshape(2,1)
+    
+    def momentum_state_init(self, k0, sigma, x_momentum, y_momentum):
+        spinor_state = self.spinor_state_init(x_momentum, y_momentum)
+        gaussian = self.gaussian_wavefunction(k0, sigma).reshape(1,-1)
+        self.k_state = spinor_state*gaussian
+
+    def momentum_to_real_space(self):
+        # Perform IFFT for each sublattice
+        A_real_space = np.fft.ifft(self.k_state)
+        B_real_space = np.fft.ifft(self.k_state)
+
+        print(A_real_space)
+        print(B_real_space)
+        # Split lattice into A- and B-sublattice sites
+        #real_space_A = psi_A_real_space[::2]  # Every other site for A-sublattice
+        #real_space_B = psi_B_real_space[1::2]  # Remaining sites for B-sublattice
+
 
 
     def plot_wavefunction(self, step):
@@ -88,23 +105,7 @@ class Wavefunction1D(Wavefunction):
         plt.savefig(frame_filename)
         plt.close()
         
-        return frame_filename
-        
-    def add_complex_absorbing_potential(self, potential_strength, n, power=2):
-        num_sites = self.lattice.get_num_sites()
-        H = self.lattice.get_hamiltonian()
-
-        if not sparse.issparse(H):
-            H = sparse.csr_matrix(H, dtype=np.complex128)
-
-        complex_potential = np.zeros(num_sites, dtype=np.complex128)
-        for i in range(min(n, num_sites)):
-            scale_factor = ((n - i) / n) ** power
-            complex_potential[i] = -1j * potential_strength * scale_factor
-            complex_potential[-(i + 1)] = -1j * potential_strength * scale_factor
-        diagonal_matrix = sparse.diags(complex_potential)
-        H += diagonal_matrix
-        self.lattice.set_hamiltonian(H)
+        return frame_filenamebut 
 
     def momentum_space(self):
         self.k_state = np.fft.fft(self.state)
