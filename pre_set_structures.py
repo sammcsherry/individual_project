@@ -14,7 +14,6 @@ def graphene():
         ([1, -1], 'A', 'B', t),
         ([0, -1], 'A', 'B', t)
     )
-
     return lattice
 
 def square_lattice(hopping_strength):
@@ -27,9 +26,7 @@ def square_lattice(hopping_strength):
     lattice = pb.Lattice(a1, a2)
     lattice.add_sublattices(('A', [0, 0]))
     lattice.add_hoppings(
-        # inside the main cell
         ([1,  0], 'A', 'A', hopping_strength),
-        # between neighboring cells
         ([0,  1], 'A', 'A', hopping_strength)
     )
     return lattice
@@ -41,7 +38,7 @@ def hexagonal_lattice(hopping_strength):
     a1 = [a * 1.5, a * sqrt3 / 2]
     a2 = [a * 1.5, -a * sqrt3 / 2]
 
-    # Create the lattice
+
     lattice = pb.Lattice(a1, a2)
     lattice.add_sublattices(('A', [0, 0])) 
     lattice.add_hoppings(
@@ -55,14 +52,12 @@ def hexagonal_lattice(hopping_strength):
 
 
 def chain_lattice(hopping_strength):
-    a = 1.0  # [nm] unit cell length
-    t = hopping_strength  # Hopping strength
+    a = 1.0
+    t = hopping_strength 
 
-    lattice = pb.Lattice(a1=[a])  # 1D lattice with one unit vector
-    lattice.add_sublattices(('A', [0]))  # Single sublattice
+    lattice = pb.Lattice(a1=[a]) 
+    lattice.add_sublattices(('A', [0]))
     lattice.add_hoppings(
-        # Hopping between neighboring cells
         ([1], 'A', 'A', t)
     )
     return lattice
-

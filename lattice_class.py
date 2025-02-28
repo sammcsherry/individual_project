@@ -42,7 +42,7 @@ class Lattice1D(Lattice):
     def create_chain(self):
         """Create a 1D chain lattice."""
         length = self.chain_length * self.unit_cell_length
-        shape = pb.line([0, 0], [length, 0])  # A straight line in 1D
+        shape = pb.line([0, 0], [length, 0]) 
         self.create_model_1D(shape)
 
 
@@ -59,16 +59,6 @@ class Lattice1D(Lattice):
         potential_matrix = csr_matrix(np.diag(potential))
         self.hamiltonian += potential_matrix
 
-    def apply_periodic_boundary_conditions(self):
-        lil_hamiltonian = self.hamiltonian.tolil()
-        num_sites = lil_hamiltonian.shape[0]
-
-        lil_hamiltonian[0, num_sites - 1] = -1  # Example hopping term
-        lil_hamiltonian[num_sites - 1, 0] = -1  # Example hopping term
-
-        # Convert back to CSR format
-        self.hamiltonian = lil_hamiltonian.tocsr()
-
     def add_pml(self, width=2.0, sigma=1.0, exponent=1, strength = 0.1):
         x = self.lattice_positions[0]
         x_min, x_max = np.min(x), np.max(x)
@@ -78,13 +68,13 @@ class Lattice1D(Lattice):
         d = np.maximum(dx_left, dx_right)
         damping = (-1j * sigma * (d / width)**exponent)*strength
 
-        plt.figure()
+        """plt.figure()
         plt.plot(x, damping.real, label='Real part')
         plt.plot(x, damping.imag, label='Imaginary part')
         plt.xlabel("x")
         plt.ylabel("PML potential")
         plt.legend()
-        #plt.show()
+        #plt.show()#"""
         
         damping_mat = sp.diags(damping, format="csr")
         self.hamiltonian = self.hamiltonian + damping_mat
@@ -96,12 +86,10 @@ class Lattice2D(Lattice):
         super().__init__(unit_cell)
     
     def create_model_2D(self, width, height):
-        """Create a PyBinding model with the configured lattice and shape."""
         self.width = width
         self.height = height
         shape = pb.rectangle(x=width, y=height)
         self.model = pb.Model(self.unit_cell, shape)
-        pb.translational_symmetry(a1 = True, a2 =True)
         self.hamiltonian = self.model.hamiltonian
         self.hamiltonian_coo = self.hamiltonian.tocoo()
         self.lattice_positions = self.model.system.positions
@@ -113,15 +101,15 @@ class Lattice2D(Lattice):
         potential_matrix = csr_matrix(np.diag(potential))
         self.hamiltonian += potential_matrix
 
-    def add_coulomb_potential(self, x0, y0, charge=1.0, epsilon=3.0, a = 0.1):
+    def add_coulomb_potential(self, x0, y0, charge=1.0, epsilon=3.0, a = 0.3):
 
         distance = np.sqrt((self.lattice_positions[0] - x0)**2 + (self.lattice_positions[1] - y0)**2)
         distance = np.where(distance == 0, 1e-10, distance)
         potential = charge / (4 * np.pi * epsilon * np.sqrt(distance**2 + a**2))
-        plt.scatter(self.lattice_positions[0], self.lattice_positions[1], c = potential, cmap='viridis', s=4)
-        plt.colorbar(label='Imaginary Damping Strength')
-        plt.show()
-        potential_matrix = csr_matrix(np.diag(potential))
+        #plt.scatter(self.lattice_positions[0], self.lattice_positions[1], c = potential, cmap='viridis', s=4)
+        #plt.colorbar(label='Imaginary Damping Strength')
+        #plt.show()
+        potential_matrix = csr_matrix(sp.diags(potential))
         self.hamiltonian += potential_matrix
 
 
@@ -152,14 +140,21 @@ class Lattice2D(Lattice):
 
         damping = damping_right + damping_left + damping_top + damping_bottom
 
-        plt.figure(figsize=(8, 6))
+        """plt.figure(figsize=(8, 6))
         plt.scatter(x, y, c=damping.imag, cmap='viridis', s=10)
         plt.colorbar(label='Imaginary Damping Strength')
         plt.xlabel("x")
         plt.ylabel("y")
         plt.title("PML Damping Profile (Custom Widths for Each Edge)")
-        #plt.show()
+        plt.show()"""
 
-        # Apply damping to the Hamiltonian
+        
         damping_mat = sp.diags(damping, format="csr")
         self.hamiltonian = self.hamiltonian + damping_mat
+
+    def top_layer_potential(self, delta_V):
+        x_positions = self.lattice_positions[0]
+        energy = np.zeros(len(x_positions))
+        mask = (self.model.system.sub == "A2") | (x_positions.sub == "B2")
+        energy[mask] = delta_V 
+        return energy
