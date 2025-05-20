@@ -4,10 +4,20 @@ import matplotlib.pyplot as plt
 from scipy.sparse import csr_matrix
 from scipy.sparse import coo_matrix
 import scipy.sparse as sp
+from pybinding.constants import hbar
+from scipy.sparse.linalg import expm
+from pybinding.repository import graphene
+a = 0.24595   
+a_cc = 0.142 
+t = -2.8  
+t_nn = 0.1  
+vf = 3 / (2 * hbar) * abs(t) * a_cc  
 
 
 class Lattice:
-    def __init__(self, unit_cell):
+    def __init__(self, unit_cell, impurity):
+        print(hbar)
+        self.impurity = impurity
         self.unit_cell = unit_cell
         self.model = None
         self.hamiltonian = None
@@ -16,7 +26,6 @@ class Lattice:
         self.cross_section = []
 
     def plot(self, title="Lattice Model"):
-        """Plot the lattice."""
         if self.model is None:
             raise ValueError("Model must be created before plotting.")
         self.model.plot()
@@ -33,24 +42,22 @@ class Lattice1D(Lattice):
         self.create_model_1D()
     
     def create_model_1D(self):
-        """Create a PyBinding model with the configured lattice and shape."""
+
         self.model = pb.Model(self.unit_cell, pb.primitive(a1=self.width))
         pb.translational_symmetry(a1=True)
         self.hamiltonian = self.model.hamiltonian
         self.lattice_positions = self.model.system.positions
 
     def create_chain(self):
-        """Create a 1D chain lattice."""
         length = self.chain_length * self.unit_cell_length
         shape = pb.line([0, 0], [length, 0]) 
         self.create_model_1D(shape)
 
 
     def add_linear_potential(self, slope):
-        """Add a linear potential gradient along the chain."""
         def linear_potential(positions):
             x_positions = positions[0]
-            return slope * x_positions  # Linear function of x
+            return slope * x_positions  
 
         self.add_potential(linear_potential)
     
@@ -58,6 +65,14 @@ class Lattice1D(Lattice):
         potential = U0 * np.exp(-((self.lattice_positions[0] - x0) ** 2) / (2 * sigma ** 2))
         potential_matrix = csr_matrix(np.diag(potential))
         self.hamiltonian += potential_matrix
+
+    def apply_periodic_boundary_conditions(self):
+        lil_hamiltonian = self.hamiltonian.tolil()
+        num_sites = lil_hamiltonian.shape[0]
+
+        lil_hamiltonian[0, num_sites - 1] = -1  
+        lil_hamiltonian[num_sites - 1, 0] = -1  
+        self.hamiltonian = lil_hamiltonian.tocsr()
 
     def add_pml(self, width=2.0, sigma=1.0, exponent=1, strength = 0.1):
         x = self.lattice_positions[0]
@@ -82,17 +97,24 @@ class Lattice1D(Lattice):
 
 
 class Lattice2D(Lattice):
-    def __init__(self, unit_cell):
-        super().__init__(unit_cell)
-    
-    def create_model_2D(self, width, height):
+    def __init__(self, unit_cell, impurity, height, width,**kwargs):
+        super().__init__(unit_cell, impurity)
         self.width = width
         self.height = height
-        shape = pb.rectangle(x=width, y=height)
-        self.model = pb.Model(self.unit_cell, shape)
-        self.hamiltonian = self.model.hamiltonian
+        self.impurity = impurity
+        self.create_model()
+        self.potential_hamiltonian = csr_matrix(sp.diags(np.ones(len(self.lattice_positions[0]))))
+        if impurity == 'coulomb':
+            self.add_coulomb_potential(self.lattice_positions[0], self.lattice_positions[1], **kwargs)
         self.hamiltonian_coo = self.hamiltonian.tocoo()
+
+    def create_model(self):
+        shape = pb.rectangle(x=self.width, y=self.height)
+        self.model = pb.Model(self.unit_cell, shape, graphene.constant_magnetic_field(magnitude=0.5))
         self.lattice_positions = self.model.system.positions
+        self.hamiltonian = self.model.hamiltonian
+        self.x = self.lattice_positions[0]
+        self.y = self.lattice_positions[1]
         
     def add_gaussian_potential(self, U0, x0, y0, sigma):
         x = self.lattice_positions[0]
@@ -101,16 +123,18 @@ class Lattice2D(Lattice):
         potential_matrix = csr_matrix(np.diag(potential))
         self.hamiltonian += potential_matrix
 
-    def add_coulomb_potential(self, x0, y0, charge=1.0, epsilon=3.0, a = 0.3):
+    def add_coulomb_potential(self, x,y,x0, y0, beta):
+        scaled_beta = beta * hbar * vf
+        r = np.sqrt((x - x0)**2 + (y - y0)**2)
+        potential = scaled_beta / np.sqrt(r**2)
+        self.potential_hamiltonian = csr_matrix(sp.diags(potential))
+        print("lattice")
+        self.hamiltonian += self.potential_hamiltonian
 
-        distance = np.sqrt((self.lattice_positions[0] - x0)**2 + (self.lattice_positions[1] - y0)**2)
-        distance = np.where(distance == 0, 1e-10, distance)
-        potential = charge / (4 * np.pi * epsilon * np.sqrt(distance**2 + a**2))
-        #plt.scatter(self.lattice_positions[0], self.lattice_positions[1], c = potential, cmap='viridis', s=4)
-        #plt.colorbar(label='Imaginary Damping Strength')
+        #surface = plt.scatter(x, y, c=potential, cmap="viridis", s=40)
+
+        #plt.colorbar(surface, shrink=0.5, aspect=5)
         #plt.show()
-        potential_matrix = csr_matrix(sp.diags(potential))
-        self.hamiltonian += potential_matrix
 
 
     
@@ -155,6 +179,6 @@ class Lattice2D(Lattice):
     def top_layer_potential(self, delta_V):
         x_positions = self.lattice_positions[0]
         energy = np.zeros(len(x_positions))
-        mask = (self.model.system.sub == "A2") | (x_positions.sub == "B2")
+        mask = (self.model.system.sub == "A2") | (self.model.system.sub == "B2")
         energy[mask] = delta_V 
         return energy
