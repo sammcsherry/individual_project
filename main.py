@@ -4,7 +4,6 @@ from lattice_class import *
 from evolve_wavefunction import *
 import matplotlib.pyplot as plt
 import numpy as np
-from pre_set_structures import *
 import matplotlib.pyplot as plt
 from pybinding.repository import graphene
 from scipy.interpolate import griddata
